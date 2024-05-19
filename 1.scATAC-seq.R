@@ -98,12 +98,87 @@ pbmc <- RunTFIDF(pbmc)
 pbmc <- FindTopFeatures(pbmc, min.cutoff = 'q0')
 pbmc <- RunSVD(pbmc)
 
-install.packages("Matrix", type = "source")
-install.packages("irlba", type = "source")
-##Non-linear dimension reduction and clustering
+pdf('5.pdf')
+DepthCor(pbmc)
+dev.off()
+
+##5.Non-linear dimension reduction and clustering
 pbmc <- RunUMAP(object = pbmc, reduction = 'lsi', dims = 2:30)
 pbmc <- FindNeighbors(object = pbmc, reduction = 'lsi', dims = 2:30)
 pbmc <- FindClusters(object = pbmc, verbose = FALSE, algorithm = 3)
-DimPlot(object = pbmc, label = TRUE) + NoLegend()
 
-q()
+pdf('6.pdf')
+DimPlot(object = pbmc, label = TRUE) + NoLegend()
+dev.off()
+
+##6.Create a gene activity matrix
+gene.activities <- GeneActivity(pbmc)
+# add the gene activity matrix to the Seurat object as a new assay and normalize it
+pbmc[['RNA']] <- CreateAssayObject(counts = gene.activities)
+pbmc <- NormalizeData(
+  object = pbmc,
+  assay = 'RNA',
+  normalization.method = 'LogNormalize',
+  scale.factor = median(pbmc$nCount_RNA)
+)
+
+DefaultAssay(pbmc) <- 'RNA'
+
+pdf('7.pdf')
+FeaturePlot(
+  object = pbmc,
+  features = c('MS4A1', 'CD3D', 'LEF1', 'NKG7', 'TREM1', 'LYZ'),
+  pt.size = 0.1,
+  max.cutoff = 'q95',
+  ncol = 3
+)
+dev.off()
+
+#7.Integrating with scRNA-seq data
+# Load the pre-processed scRNA-seq data for PBMCs
+pbmc_rna <- readRDS("scRNA/pbmc_10k_v3.rds")
+pbmc_rna <- UpdateSeuratObject(pbmc_rna)
+transfer.anchors <- FindTransferAnchors(
+  reference = pbmc_rna,
+  query = pbmc,
+  reduction = 'cca'
+)
+predicted.labels <- TransferData(
+  anchorset = transfer.anchors,
+  refdata = pbmc_rna$celltype,
+  weight.reduction = pbmc[['lsi']],
+  dims = 2:30
+)
+pbmc <- AddMetaData(object = pbmc, metadata = predicted.labels)
+plot1 <- DimPlot(
+  object = pbmc_rna,
+  group.by = 'celltype',
+  label = TRUE,
+  repel = TRUE) + NoLegend() + ggtitle('scRNA-seq')
+plot2 <- DimPlot(
+  object = pbmc,
+  group.by = 'predicted.id',
+  label = TRUE,
+  repel = TRUE) + NoLegend() + ggtitle('scATAC-seq')
+pdf('8.pdf')
+plot1 + plot2
+dev.off()
+
+# replace each label with its most likely prediction
+for(i in levels(pbmc)) {
+  cells_to_reid <- WhichCells(pbmc, idents = i)
+  newid <- names(which.max(table(pbmc$predicted.id[cells_to_reid])))
+  Idents(pbmc, cells = cells_to_reid) <- newid
+}
+View(pbmc@meta.data)
+sort(table(pbmc@active.ident))
+pbmc = StashIdent(pbmc, "celltype")
+CD14monocytes=subset(pbmc, celltype== 'CD14+ Monocytes')
+CD4memory=subset(pbmc, celltype== 'CD4 Memory')
+CD4native=subset(pbmc,celltype=='CD4 Naive')
+CD8native=subset(pbmc,celltype=='CD8 Naive')
+save(CD14monocytes,file='CD14monocytes.Rdata')
+save(CD4memory,file='CD4memory.Rdata')
+save(CD4native,file='CD4native.Rdata')
+save(CD8native,file='CD8native.Rdata')
+
