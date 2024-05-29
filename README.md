@@ -6,5 +6,6 @@ for i in $(seq 1 22) X Y M;do cat chr${i}.fa >> hg19.fasta;done
 
 
 
-1.python is used to remove peaks apear in less than 10% cells
-2.R is used to yield a file with chr and its bases
+1.python is used to remove peaks apear in less than 10% cells.
+2.R is used to yield a file beginning with >, flowing chromosome place and bases.
+3.python is used to scanning TF motif with fimo.
